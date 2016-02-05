@@ -14,7 +14,7 @@
     "async"
   ],
   "scripts": {
-    "samples": "node test/sample-1 && node test/sample-2",
+    "samples": "node test/samples",
     "utest": "nsolid test/index.js | tap-spec",
     "standard": "standard",
     "test": "npm run samples && npm run utest && standard",

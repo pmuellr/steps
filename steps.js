@@ -13,102 +13,117 @@ function parallel (data, steps) {
 
 class Evaluator {
   constructor (data, steps) {
-    this.self = data
-    this.data = data
-    this.steps = (steps || []).slice()
-    this.running = false
+    this._self = data
+    this._data = data
+    this._steps = (steps || []).slice()
+    this._running = false
   }
 
   add (step) {
-    if (this.running) throw new Error('invalid when running')
-    this.steps.push(step)
+    ensureNotRunning(this)
+    this._steps.push(step)
 
     return this
   }
 
-  bind (self) {
-    if (this.running) throw new Error('invalid when running')
+  series (steps) {
+    ensureNotRunning(this)
+    throw new Error('TBD')
+  }
 
-    this.self = self
+  parallel (steps) {
+    ensureNotRunning(this)
+    throw new Error('TBD')
+  }
+
+  bind (self) {
+    ensureNotRunning(this)
+
+    this._self = self
 
     return this
   }
 
   run (cb) {
-    if (this.running) throw new Error('invalid when running')
+    ensureNotRunning(this)
 
-    this.running = true
-    this.cb = cb
+    this._running = true
+    this._cb = cb
 
-    this.basicRun()
+    this._basicRun()
   }
 
-  callStep (stepFn, stepContext) {
-    stepContext.data = this.data
-    stepContext.done = this.ensureOnce(stepContext.done)
-    stepContext.stop = this.ensureOnce(stepContext.stop)
+  _callStep (stepFn, stepContext) {
+    stepContext.data = this._data
+    stepContext.done = ensureCalledOnce(stepContext.done)
+    stepContext.stop = ensureCalledOnce(stepContext.stop)
 
-    stepFn.call(this.self, stepContext)
+    stepFn.call(this._self, stepContext)
   }
 
-  ensureOnce (fn) {
-    let called = false
-    return function () {
-      if (called) throw new Error('already called once')
+  _finish () {
+    process.nextTick(cbWrapper, this._cb, this._self, this._data)
 
-      called = true
-      fn.apply(this, [].slice.call(arguments))
+    this._cb = null
+    this._self = null
+    this._data = null
+    this._steps = null
+
+    function cbWrapper (cb, self, data) {
+      cb.call(self, data)
     }
   }
+}
 
-  finish () {
-    process.nextTick(cbWrapper, this.cb, this.data)
+function ensureNotRunning (steps) {
+  if (steps._running) throw new Error('cannot call while running')
+}
 
-    this.cb = null
-    this.data = null
-    this.steps = null
+function ensureCalledOnce (fn) {
+  let called = false
 
-    function cbWrapper (cb, data) {
-      cb.call(data, data)
-    }
+  return function () {
+    if (called) throw new Error('already called once')
+
+    called = true
+    return fn.apply(this, [].slice.call(arguments))
   }
-
 }
 
 class Series extends Evaluator {
 
-  basicRun () {
+  _basicRun () {
     // finished?
-    if (this.steps.length === 0) return this.finish()
+    if (this._steps.length === 0) return this._finish()
 
     // get next stepFn, build stepContext
-    const stepFn = this.steps.shift()
+    const stepFn = this._steps.shift()
     const stepContext = {
-      done: _ => this.basicRun(),
-      stop: _ => this.finish()
+      done: _ => this._basicRun(),
+      stop: _ => this._finish()
     }
 
     // call step
-    this.callStep(stepFn, stepContext)
+    this._callStep(stepFn, stepContext)
   }
 
 }
 
 class Parallel extends Evaluator {
 
-  basicRun () {
+  _basicRun () {
     // finished?
-    if (this.steps.length === 0) return this.finish()
+    if (this._steps.length === 0) return this._finish()
 
-    let length = this.steps.length
+    let length = this._steps.length
 
-    for (let stepFn of this.steps) {
+    for (let stepFn of this._steps) {
       const stepContext = {
-        done: _ => { length--; if (length === 0) this.finish() },
+        done: _ => { length--; if (length === 0) this._finish() },
         stop: stopFn
       }
 
-      this.callStep(stepFn, stepContext)
+      this._callStep(stepFn, stepContext)
     }
 
     function stopFn () {

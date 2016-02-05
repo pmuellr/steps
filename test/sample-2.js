@@ -4,15 +4,26 @@ const steps = require('..')
 
 let dateStart = Date.now()
 
-steps.series({n: 's'})
+// same as the series example above, but adding the steps with the `add()`
+// method, and adding a new step which will call the `stop()` function of the
+// step context.  b() will not be invoked.
+steps.series({n: 's2'})
   .add(a)
   .add(stop)
   .add(b)
   .run(obj => console.log(this, obj))
 
-steps.parallel({n: 'p'}, [a])
+// same as the parallel sample above, but adding the step b with the `add()`
+// method
+steps.parallel({n: 'p2'}, [a])
   .add(b)
   .run(obj => console.log(this, obj))
+
+// This new step function will call `stop()` function on the step context,
+// which will stop further steps from running.
+function stop (sc) {
+  sc.stop()
+}
 
 function a (sc) {
   onTimeout(100, function () {
@@ -26,10 +37,6 @@ function b (sc) {
     this.y = elapsed()
     sc.done()
   })
-}
-
-function stop (sc) {
-  sc.stop()
 }
 
 function onTimeout (ms, fn) { setTimeout(fn, ms) }
